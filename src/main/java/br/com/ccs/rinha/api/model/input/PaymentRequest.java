@@ -1,27 +1,17 @@
 package br.com.ccs.rinha.api.model.input;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
-
 import java.math.BigDecimal;
-import java.time.OffsetDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 public final class PaymentRequest {
     public UUID correlationId;
     public BigDecimal amount;
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
-    public OffsetDateTime requestedAt;
+    public Instant requestedAt;
     public boolean isDefault;
+    public Instant receivedAt;
 
-    public PaymentRequest() {
-    }
-
-    public PaymentRequest(UUID correlationId, BigDecimal amount, OffsetDateTime requestedAt, boolean isDefault) {
-        this.correlationId = correlationId;
-        this.amount = amount;
-        this.requestedAt = requestedAt;
-        this.isDefault = isDefault;
-    }
+    private String json;
 
     public void setDefaultFalse() {
         this.isDefault = false;
@@ -31,4 +21,41 @@ public final class PaymentRequest {
         this.isDefault = true;
     }
 
+    public String getJson() {
+        if (json == null) {
+            toJson();
+        }
+        return json;
+    }
+
+    public static PaymentRequest parse(String json) {
+        PaymentRequest req = new PaymentRequest();
+
+        int startId = json.indexOf(":\"") + 2;
+        int endId = json.indexOf('"', startId);
+        req.correlationId = UUID.fromString(json.substring(startId, endId));
+
+
+        int startAmount = json.indexOf(":", endId) + 1;
+        int endAmount = json.indexOf('}', startAmount);
+
+        req.amount = new BigDecimal(json.substring(startAmount, endAmount).trim());
+
+        Instant now = Instant.now();
+        req.requestedAt = now;
+        req.receivedAt = now;
+        req.setDefaultFalse();
+
+        return req;
+    }
+
+    private void toJson() {
+        var sb = new StringBuilder(128);
+        json = sb.append("{")
+                .append("\"correlationId\":\"").append(correlationId).append("\",")
+                .append("\"amount\":").append(amount).append(",")
+                .append("\"requestedAt\":\"").append(requestedAt).append("\"")
+                .append("}")
+                .toString();
+    }
 }

@@ -2,14 +2,14 @@ package br.com.ccs.rinha.repository;
 
 import br.com.ccs.rinha.api.model.input.PaymentRequest;
 import br.com.ccs.rinha.api.model.output.PaymentSummary;
-import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
-import java.time.OffsetDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Set;
 
 import static java.util.Objects.isNull;
@@ -29,37 +29,33 @@ public class RedisPaymentRepository {
         log.info("ShutDown immediately: {}", shouldShutdownImmediately);
     }
 
-    @PostConstruct
-    public void warmup() {
-        try {
-            // Aquece conexão Redis
-            redisTemplate.opsForValue().get("warmup");
-            redisTemplate.opsForZSet().count("warmup", 0, 1);
-        } catch (Exception e) {
-            // Ignora erros de warmup
-        }
-    }
+    public void saveAsync(PaymentRequest request) {
+        //todo implementar worker ???
+        //se usar reativo talvez não precise
 
+        throw new RuntimeException("Ainda não!!!!!!!");
+
+    }
 
     public void store(PaymentRequest request) {
         String data = request.correlationId + ":" + request.amount.multiply(BigDecimal.valueOf(100)).longValue() + ":" + request.isDefault;
 
         redisTemplate
                 .opsForZSet()
-                .add(PAYMENTS, data, request.requestedAt.toInstant().toEpochMilli());
+                .add(PAYMENTS, data, request.requestedAt.toEpochMilli());
 
     }
 
-    public PaymentSummary getSummary(OffsetDateTime from, OffsetDateTime to) {
+    public PaymentSummary getSummary(Instant from, Instant to) {
 
         if (isNull(from)) {
-            from = OffsetDateTime.now().minusMinutes(5);
+            from = Instant.now().minus(5, ChronoUnit.MINUTES);
         }
 
         if (isNull(to)) {
-            to = OffsetDateTime.now();
+            to = Instant.now();
         }
-        var payments = redisTemplate.opsForZSet().rangeByScore(PAYMENTS, from.toInstant().toEpochMilli(), to.toInstant().toEpochMilli());
+        var payments = redisTemplate.opsForZSet().rangeByScore(PAYMENTS, from.toEpochMilli(), to.toEpochMilli());
 
         return calculateSummary(payments);
     }
@@ -96,5 +92,4 @@ public class RedisPaymentRepository {
     public void purge() {
         redisTemplate.delete(PAYMENTS);
     }
-
 }
