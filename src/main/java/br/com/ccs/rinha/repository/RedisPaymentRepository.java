@@ -4,12 +4,14 @@ import br.com.ccs.rinha.api.model.input.PaymentRequest;
 import br.com.ccs.rinha.api.model.output.PaymentSummary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Set;
 
 import static java.util.Objects.isNull;
@@ -21,20 +23,9 @@ public class RedisPaymentRepository {
 
     private final RedisTemplate<String, String> redisTemplate;
     private static final String PAYMENTS = "payments";
-    private final boolean shouldShutdownImmediately;
 
     public RedisPaymentRepository(RedisTemplate<String, String> redisTemplate) {
         this.redisTemplate = redisTemplate;
-        this.shouldShutdownImmediately = Boolean.parseBoolean(System.getenv("SHUTDOWN_IMMEDIATELY"));
-        log.info("ShutDown immediately: {}", shouldShutdownImmediately);
-    }
-
-    public void saveAsync(PaymentRequest request) {
-        //todo implementar worker ???
-        //se usar reativo talvez não precise
-
-        throw new RuntimeException("Ainda não!!!!!!!");
-
     }
 
     public void store(PaymentRequest request) {
@@ -45,6 +36,29 @@ public class RedisPaymentRepository {
                 .add(PAYMENTS, data, request.requestedAt.toEpochMilli());
 
     }
+
+    public void storeBatch(List<PaymentRequest> requests) {
+        var start = System.nanoTime();
+
+        redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
+            for (PaymentRequest request : requests) {
+                String data = request.correlationId + ":" +
+                        request.amount.multiply(BigDecimal.valueOf(100)).longValue() + ":" +
+                        request.isDefault;
+
+                byte[] key = redisTemplate.getStringSerializer().serialize(PAYMENTS);
+                byte[] value = redisTemplate.getStringSerializer().serialize(data);
+
+                connection.zAdd(key, request.requestedAt.toEpochMilli(), value);
+            }
+
+            log.info("BATCH {} executed in {}ms", requests.size(),
+                    String.format("%.3f", (System.nanoTime() - start) / 1_000_000F));
+
+            return null;
+        });
+    }
+
 
     public PaymentSummary getSummary(Instant from, Instant to) {
 

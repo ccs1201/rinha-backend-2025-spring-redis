@@ -10,19 +10,24 @@ x-backend-templates:
     deploy:
       resources:
         limits:
-          cpus: "0.65"
-          memory: "140MB"
+          cpus: "0.6"
+          memory: "100MB"
 
   app-env: &app-env
-    REDIS_HOST: "redis"
-    ACTIVE_MONITOR: "false"
-    SERVER_PORT: "8080"
-    VIRTUAL_THREADS: "true"
-    THREAD_POOL_SIZE: "10"
+    ACTIVE_MONITOR: "true"
+    server.port: "8080"
+    PAYMENT_PROCESSOR_MAX_RETRIES: "5"
+    PAYMENT_PROCESSOR_REQUEST_TIMEOUT: "10000"
+    PAYMENT_PROCESSOR_WORKERS: "1"
     QUEUE_SIZE: "5000"
     QUEUE_IS_FAIR: "true"
+    REDIS_HOST: "redis"
+    REDIS_WORKERS: 2
     REQUEST_CONNECTION_TIMEOUT: "50"
     REQUEST_READ_TIMEOUT: "3000"
+    THREAD_POOL_SIZE: "10"
+    VIRTUAL_THREADS: "true"
+    WEBCLIENT_MAX_CONNECTION: "200"
     payment-processor.default.url: "http://payment-processor-default:8080"
     payment-processor.fallback.url: "http://payment-processor-fallback:8080"
     SPRING_APPLICATION_JSON: >
@@ -75,10 +80,17 @@ services:
       <<: *app-env
 
   redis:
-    image: redis:7-alpine
+    image: redis:8.0.3-alpine
     container_name: redis
     hostname: redis
-    command: redis-server --maxmemory 45mb --maxmemory-policy allkeys-lru --save "" --tcp-keepalive 60 --timeout 0
+    command: [
+      "redis-server",
+      "--save", "",
+      "--appendonly", "no",
+      "--maxmemory", "110mb",
+      "--maxmemory-policy", "noeviction",
+      "--timeout", "0"
+    ]
     ports:
       - "6379:6379"
     networks:
@@ -86,8 +98,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.1"
-          memory: "55MB"
+          cpus: "0.2"
+          memory: "135MB"
 
 networks:
   backend:

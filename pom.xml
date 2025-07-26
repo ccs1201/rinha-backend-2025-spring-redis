@@ -67,7 +67,7 @@
                     <mainClass>br.com.ccs.rinha.RinhaApp</mainClass>
                     <image>
                         <name>csouzadocker/rinha-2025-redis-native:latest</name>
-                        <builder>paketobuildpacks/builder-jammy-java-tiny:latest</builder>
+                        <builder>paketobuildpacks/builder-jammy-java-tiny:0.0.1</builder>
                         <env>
                             <BP_JVM_TYPE>JDK</BP_JVM_TYPE>
                             <BP_NATIVE_IMAGE>true</BP_NATIVE_IMAGE>

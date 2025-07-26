@@ -1,7 +1,7 @@
 package br.com.ccs.rinha.service;
 
 import br.com.ccs.rinha.api.model.input.PaymentRequest;
-import br.com.ccs.rinha.repository.RedisPaymentRepository;
+import br.com.ccs.rinha.repository.RedisRepositoryWorker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,7 +17,7 @@ public class PaymentProcessorClientServiceBlocking {
 
     private static final Logger log = LoggerFactory.getLogger(PaymentProcessorClientServiceBlocking.class);
 
-    private final RedisPaymentRepository repository;
+    private final RedisRepositoryWorker redisRepositoryWorker;
     private final String defaultUrl;
     private final String fallbackUrl;
     private final WebClient webClient;
@@ -27,12 +27,12 @@ public class PaymentProcessorClientServiceBlocking {
 
 
     public PaymentProcessorClientServiceBlocking(
-            RedisPaymentRepository paymentRepository,
+            RedisRepositoryWorker redisRepositoryWorker,
             WebClient webClient,
             @Value("${payment-processor.default.url}") String defaultUrl,
             @Value("${payment-processor.fallback.url}") String fallbackUrl) {
 
-        this.repository = paymentRepository;
+        this.redisRepositoryWorker = redisRepositoryWorker;
         this.defaultUrl = defaultUrl.concat("/payments");
         this.fallbackUrl = fallbackUrl.concat("/payments");
         this.webClient = webClient;
@@ -50,7 +50,7 @@ public class PaymentProcessorClientServiceBlocking {
         log.info("Fallback service URL: {}", this.fallbackUrl);
         log.info("Request timeout: {}", timeOut);
         log.info("Max retries: {}", retries);
-        log.info("Workers: {}", workers);
+        log.info("Payment processor Workers: {}", workers);
     }
 
     private void startProcessQueue(int wokerIndex) {
@@ -101,6 +101,7 @@ public class PaymentProcessorClientServiceBlocking {
                 .exchangeToMono(clientResponse ->
                         Mono.just(clientResponse.statusCode().is2xxSuccessful()))
                 .timeout(Duration.ofMillis(timeOut))
+                .doOnError(throwable -> log.error("default has error: {}", throwable.getMessage()))
                 .onErrorReturn(Boolean.FALSE)
                 .block();
     }
@@ -115,11 +116,12 @@ public class PaymentProcessorClientServiceBlocking {
                         Mono.just(clientResponse.statusCode().is2xxSuccessful())
                 )
                 .timeout(Duration.ofMillis(timeOut))
+                .doOnError(throwable -> log.error("fallback has error: {}", throwable.getMessage()))
                 .onErrorReturn(Boolean.FALSE)
                 .block();
     }
 
     private void save(PaymentRequest request) {
-        repository.store(request);
+        redisRepositoryWorker.offer(request);
     }
 }
