@@ -1,7 +1,5 @@
 package br.com.ccs.rinha.api.model.output;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-
 import java.math.BigDecimal;
 
 public record PaymentSummary(Summary _default, Summary fallback) {

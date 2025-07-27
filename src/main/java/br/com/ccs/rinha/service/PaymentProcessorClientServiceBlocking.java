@@ -36,7 +36,7 @@ public class PaymentProcessorClientServiceBlocking {
         this.defaultUrl = defaultUrl.concat("/payments");
         this.fallbackUrl = fallbackUrl.concat("/payments");
         this.webClient = webClient;
-        this.queue = new ArrayBlockingQueue<>(10000, false);
+        this.queue = new ArrayBlockingQueue<>(10_000, false);
 
         this.retries = Integer.parseInt(System.getenv("PAYMENT_PROCESSOR_MAX_RETRIES"));
         this.timeOut = Integer.parseInt(System.getenv("PAYMENT_PROCESSOR_REQUEST_TIMEOUT"));

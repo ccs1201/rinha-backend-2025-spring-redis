@@ -5,7 +5,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 
 @Component
@@ -28,27 +27,29 @@ public class RedisRepositoryWorker {
     private void startWorker(int workerIndex) {
         Thread.ofVirtual().name("Redis-Worker-" + workerIndex)
                 .start(() -> {
-                    int completed = 0;
+                    log.info("Starting Redis-Worker-{}", workerIndex);
+//                    int completed = 0;
                     while (!Thread.currentThread().isInterrupted()) {
                         try {
-                            if (queue.size() > 10) {
-                                var payments = new ArrayList<PaymentRequest>(50);
-                                queue.drainTo(payments, 50);
-                                repository.storeBatch(payments);
-                            }
+//                            if (queue.size() > 10) {
+//                                var payments = new ArrayList<PaymentRequest>(50);
+//                                queue.drainTo(payments, 50);
+//                                repository.storeBatch(payments);
+//                            }
 
-                            var p = queue.take();
-                            var start = System.nanoTime();
-                            repository.store(p);
-                            completed++;
-                            long elapsedNanos = System.nanoTime() - start;
-                            double elapsedMillis = elapsedNanos / 1_000_000.0;
-                            log.info("Redis-Worker-{} tasks {} completed in {}ms remaining {}", workerIndex, completed, String.format("%.3f", elapsedMillis), queue.size());
+//                            var p = queue.take();
+//                            var start = System.nanoTime();
+                            repository.store(queue.take());
+//                            completed++;
+//                            long elapsedNanos = System.nanoTime() - start;
+//                            double elapsedMillis = elapsedNanos / 1_000_000.0;
+//                            log.info("Redis-Worker-{} tasks {} completed in {}ms remaining {}", workerIndex, completed, String.format("%.3f", elapsedMillis), queue.size());
 
                         } catch (InterruptedException e) {
                             Thread.currentThread().interrupt();
                         }
                     }
+                    log.info("Redis-Worker-{} started", workerIndex);
                 });
     }
 

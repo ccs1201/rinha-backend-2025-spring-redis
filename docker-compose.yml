@@ -1,6 +1,6 @@
 x-backend-templates:
   app: &app
-    image: csouzadocker/rinha-2025-redis-native:latest
+    image: csouzadocker/rinha-2025-redis-native:0.0.1
     depends_on:
       redis:
         condition: service_started
@@ -10,19 +10,19 @@ x-backend-templates:
     deploy:
       resources:
         limits:
-          cpus: "0.6"
+          cpus: "0.65"
           memory: "100MB"
 
   app-env: &app-env
-    ACTIVE_MONITOR: "true"
+    ACTIVE_MONITOR: "false"
     server.port: "8080"
-    PAYMENT_PROCESSOR_MAX_RETRIES: "5"
+    PAYMENT_PROCESSOR_MAX_RETRIES: "3"
     PAYMENT_PROCESSOR_REQUEST_TIMEOUT: "10000"
-    PAYMENT_PROCESSOR_WORKERS: "1"
-    QUEUE_SIZE: "5000"
+    PAYMENT_PROCESSOR_WORKERS: "20"
+    QUEUE_SIZE: "500"
     QUEUE_IS_FAIR: "true"
     REDIS_HOST: "redis"
-    REDIS_WORKERS: 2
+    REDIS_WORKERS: "25"
     REQUEST_CONNECTION_TIMEOUT: "50"
     REQUEST_READ_TIMEOUT: "3000"
     THREAD_POOL_SIZE: "10"
@@ -32,14 +32,26 @@ x-backend-templates:
     payment-processor.fallback.url: "http://payment-processor-fallback:8080"
     SPRING_APPLICATION_JSON: >
       {
-        "spring.application.name": "ccs1201-rinha-backend-2025",
         "spring.threads.virtual.enabled": false,
         "server.servlet.session.persistent": false,
-        "server.servlet.session.tracking-modes": [],
         "server.servlet.session.timeout": 0,
-        "logging.level.root": "info",
+        "server.servlet.session.tracking-modes": [],
+        "spring.main.banner-mode": "off",
+        "spring.jmx.enabled": false,
+        "spring.application.admin.enabled": false,
+        "spring.mvc.async.request-timeout": -1,
+        "spring.mvc.dispatch-options-request": false,
+        "spring.mvc.dispatch-trace-request": false,
+        "spring.mvc.log-request-details": false,
         "server.undertow.threads.io": 2,
-        "server.undertow.threads.worker": 8
+        "server.undertow.threads.worker": 8,
+        "server.undertow.buffer-size": 1024,
+        "server.undertow.direct-buffers": true,
+        "server.undertow.max-http-post-size": "1KB",
+        "server.undertow.no-request-timeout": 2000,
+        "spring.mvc.log-resolved-exception": false,
+        "logging.level.root": "error",
+        "logging.level.br.com.ccs.rinha": "info"              
       }
 
 #####################################################
@@ -98,7 +110,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.2"
+          cpus: "0.1"
           memory: "135MB"
 
 networks:
