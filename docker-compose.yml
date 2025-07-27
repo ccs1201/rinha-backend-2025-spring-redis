@@ -2,8 +2,7 @@ x-backend-templates:
   app: &app
     image: csouzadocker/rinha-2025-redis-native:0.0.1
     depends_on:
-      redis:
-        condition: service_started
+      - redis
     networks:
       - backend
       - payment-processor
@@ -16,13 +15,14 @@ x-backend-templates:
   app-env: &app-env
     ACTIVE_MONITOR: "false"
     server.port: "8080"
+    PAYMENT_QUEUE: "1000"
     PAYMENT_PROCESSOR_MAX_RETRIES: "3"
     PAYMENT_PROCESSOR_REQUEST_TIMEOUT: "10000"
-    PAYMENT_PROCESSOR_WORKERS: "20"
+    PAYMENT_PROCESSOR_WORKERS: "10"
     QUEUE_SIZE: "500"
     QUEUE_IS_FAIR: "true"
     REDIS_HOST: "redis"
-    REDIS_WORKERS: "25"
+    REDIS_WORKERS: "15"
     REQUEST_CONNECTION_TIMEOUT: "50"
     REQUEST_READ_TIMEOUT: "3000"
     THREAD_POOL_SIZE: "10"

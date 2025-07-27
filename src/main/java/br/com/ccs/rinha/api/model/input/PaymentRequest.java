@@ -9,7 +9,6 @@ public final class PaymentRequest {
     public BigDecimal amount;
     public Instant requestedAt;
     public boolean isDefault;
-    public Instant receivedAt;
 
     private String json;
 
@@ -30,20 +29,13 @@ public final class PaymentRequest {
 
     public static PaymentRequest parse(String json) {
         PaymentRequest req = new PaymentRequest();
-
         int startId = json.indexOf(":\"") + 2;
         int endId = json.indexOf('"', startId);
         req.correlationId = UUID.fromString(json.substring(startId, endId));
-
-
         int startAmount = json.indexOf(":", endId) + 1;
         int endAmount = json.indexOf('}', startAmount);
-
         req.amount = new BigDecimal(json.substring(startAmount, endAmount).trim());
-
-        Instant now = Instant.now();
-        req.requestedAt = now;
-        req.receivedAt = now;
+        req.requestedAt = Instant.now();
         req.setDefaultFalse();
 
         return req;

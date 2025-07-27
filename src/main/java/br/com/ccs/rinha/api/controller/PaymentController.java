@@ -2,7 +2,7 @@ package br.com.ccs.rinha.api.controller;
 
 import br.com.ccs.rinha.api.model.input.PaymentRequest;
 import br.com.ccs.rinha.repository.RedisPaymentRepository;
-import br.com.ccs.rinha.service.PaymentProcessorClientServiceBlocking;
+import br.com.ccs.rinha.service.PaymentProcessorClientSharding;
 import jakarta.annotation.PreDestroy;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -21,11 +21,11 @@ import java.util.concurrent.ThreadPoolExecutor;
 @RequestMapping(produces = MediaType.APPLICATION_JSON_VALUE)
 public class PaymentController {
 
-    private final PaymentProcessorClientServiceBlocking client;
+    private final PaymentProcessorClientSharding client;
     private final RedisPaymentRepository repository;
     private final ExecutorService executor;
 
-    public PaymentController(PaymentProcessorClientServiceBlocking client,
+    public PaymentController(PaymentProcessorClientSharding client,
                              RedisPaymentRepository repository,
                              ThreadPoolExecutor executor) {
         this.client = client;

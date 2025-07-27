@@ -2,6 +2,7 @@ package br.com.ccs.rinha.service;
 
 import br.com.ccs.rinha.api.model.input.PaymentRequest;
 import br.com.ccs.rinha.repository.RedisRepositoryWorker;
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,49 +14,57 @@ import java.time.Duration;
 import java.util.concurrent.ArrayBlockingQueue;
 
 @Service
-public class PaymentProcessorClientServiceBlocking {
-
-    private static final Logger log = LoggerFactory.getLogger(PaymentProcessorClientServiceBlocking.class);
+public class PaymentProcessorClientSharding {
+    private static final Logger log = LoggerFactory.getLogger(PaymentProcessorClientSharding.class);
 
     private final RedisRepositoryWorker redisRepositoryWorker;
     private final String defaultUrl;
     private final String fallbackUrl;
     private final WebClient webClient;
-    private final ArrayBlockingQueue<PaymentRequest> queue;
     private final int retries;
     private final int timeOut;
+    private final int workers;
+    private final int queueCapacity;
 
+    private final ArrayBlockingQueue<PaymentRequest>[] queues;
 
-    public PaymentProcessorClientServiceBlocking(
+    public PaymentProcessorClientSharding(
             RedisRepositoryWorker redisRepositoryWorker,
             WebClient webClient,
             @Value("${payment-processor.default.url}") String defaultUrl,
             @Value("${payment-processor.fallback.url}") String fallbackUrl) {
 
         this.redisRepositoryWorker = redisRepositoryWorker;
+        this.webClient = webClient;
         this.defaultUrl = defaultUrl.concat("/payments");
         this.fallbackUrl = fallbackUrl.concat("/payments");
-        this.webClient = webClient;
-        this.queue = new ArrayBlockingQueue<>(10_000, false);
 
         this.retries = Integer.parseInt(System.getenv("PAYMENT_PROCESSOR_MAX_RETRIES"));
         this.timeOut = Integer.parseInt(System.getenv("PAYMENT_PROCESSOR_REQUEST_TIMEOUT"));
-        var workers = Integer.parseInt(System.getenv("PAYMENT_PROCESSOR_WORKERS"));
+        this.workers = Integer.parseInt(System.getenv("PAYMENT_PROCESSOR_WORKERS"));
+        this.queueCapacity = Integer.parseInt(System.getenv("PAYMENT_QUEUE"));
 
-        for (int i = 0; i < workers; i++) {
-            startProcessQueue(i);
-        }
+        this.queues = new ArrayBlockingQueue[workers];
 
         log.info("Default service URL: {}", this.defaultUrl);
         log.info("Fallback service URL: {}", this.fallbackUrl);
         log.info("Request timeout: {}", timeOut);
         log.info("Max retries: {}", retries);
         log.info("Payment processor Workers: {}", workers);
+        log.info("Queue capacity: {}", queueCapacity);
     }
 
-    private void startProcessQueue(int wokerIndex) {
-        log.info("Starting payment-processor-worker-{}", wokerIndex);
-        Thread.ofVirtual().name("payment-processor" + wokerIndex).start(() -> {
+    @PostConstruct
+    public void  init() {
+        for (int i = 0; i < workers; i++) {
+            queues[i] = new ArrayBlockingQueue<>(queueCapacity, false);
+            startProcessQueue(i, queues[i]);
+        }
+    }
+
+    private void startProcessQueue(int workerIndex, ArrayBlockingQueue<PaymentRequest> queue) {
+        log.info("Starting payment-processor-worker-{}", workerIndex);
+        Thread.ofVirtual().name("payment-processor-" + workerIndex).start(() -> {
             while (!Thread.currentThread().isInterrupted()) {
                 try {
                     processWithRetry(queue.take());
@@ -66,13 +75,15 @@ public class PaymentProcessorClientServiceBlocking {
             }
         });
 
-        log.info("payment-processor-worker-{} started", wokerIndex);
+        log.info("payment-processor-worker-{} started", workerIndex);
     }
 
     public void processPayment(PaymentRequest paymentRequest) {
-        var accepted = queue.offer(paymentRequest);
+        int index = Math.abs(paymentRequest.hashCode()) % queues.length;
+        boolean accepted = queues[index].offer(paymentRequest);
+
         if (!accepted) {
-            log.error("Payment rejected by queue");
+            log.error("Payment rejected by queue {}", index);
         }
     }
 
@@ -88,9 +99,8 @@ public class PaymentProcessorClientServiceBlocking {
                 return;
             }
         }
-        queue.offer(paymentRequest);
+        processPayment(paymentRequest);
     }
-
 
     private Boolean postToDefault(PaymentRequest paymentRequest) {
         paymentRequest.setDefaultTrue();
@@ -98,10 +108,9 @@ public class PaymentProcessorClientServiceBlocking {
         return webClient.post()
                 .uri(defaultUrl)
                 .bodyValue(paymentRequest.getJson())
-                .exchangeToMono(clientResponse ->
-                        Mono.just(clientResponse.statusCode().is2xxSuccessful()))
+                .exchangeToMono(resp -> Mono.just(resp.statusCode().is2xxSuccessful()))
                 .timeout(Duration.ofMillis(timeOut))
-                .doOnError(throwable -> log.error("default has error: {}", throwable.getMessage()))
+//                .doOnError(e -> log.error("default has error: {}", e.getMessage()))
                 .onErrorReturn(Boolean.FALSE)
                 .block();
     }
@@ -112,11 +121,9 @@ public class PaymentProcessorClientServiceBlocking {
         return webClient.post()
                 .uri(fallbackUrl)
                 .bodyValue(paymentRequest.getJson())
-                .exchangeToMono(clientResponse ->
-                        Mono.just(clientResponse.statusCode().is2xxSuccessful())
-                )
+                .exchangeToMono(resp -> Mono.just(resp.statusCode().is2xxSuccessful()))
                 .timeout(Duration.ofMillis(timeOut))
-                .doOnError(throwable -> log.error("fallback has error: {}", throwable.getMessage()))
+//                .doOnError(e -> log.error("fallback has error: {}", e.getMessage()))
                 .onErrorReturn(Boolean.FALSE)
                 .block();
     }
