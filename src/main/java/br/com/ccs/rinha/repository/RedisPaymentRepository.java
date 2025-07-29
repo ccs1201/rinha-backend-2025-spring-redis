@@ -28,12 +28,12 @@ public class RedisPaymentRepository {
         this.redisTemplate = redisTemplate;
     }
 
-    public void store(PaymentRequest request) {
-        String data = request.correlationId + ":" + request.amount.multiply(BigDecimal.valueOf(100)).longValue() + ":" + request.isDefault;
+    public void store(PaymentRequest paymentRequest) {
+        var data = DataBuilder.build(paymentRequest);
 
         redisTemplate
                 .opsForZSet()
-                .add(PAYMENTS, data, request.requestedAt.toEpochMilli());
+                .add(PAYMENTS, data, paymentRequest.requestedAt.toEpochMilli());
 
     }
 
@@ -42,9 +42,7 @@ public class RedisPaymentRepository {
 
         redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
             for (PaymentRequest request : requests) {
-                String data = request.correlationId + ":" +
-                        request.amount.multiply(BigDecimal.valueOf(100)).longValue() + ":" +
-                        request.isDefault;
+                String data = DataBuilder.build(request);
 
                 byte[] key = redisTemplate.getStringSerializer().serialize(PAYMENTS);
                 byte[] value = redisTemplate.getStringSerializer().serialize(data);
@@ -106,4 +104,26 @@ public class RedisPaymentRepository {
     public void purge() {
         redisTemplate.delete(PAYMENTS);
     }
+
+    private final class DataBuilder {
+
+        private static final ThreadLocal<StringBuilder> builderHolder = ThreadLocal.withInitial(() -> new StringBuilder(64));
+
+        private DataBuilder() {
+        }
+
+        public static String build(PaymentRequest request) {
+            StringBuilder sb = builderHolder.get();
+            sb.setLength(0);
+
+            sb.append(request.correlationId)
+                    .append(':')
+                    .append(request.amount.multiply(BigDecimal.valueOf(100)).longValueExact())
+                    .append(':')
+                    .append(request.isDefault);
+
+            return sb.toString();
+        }
+    }
+
 }

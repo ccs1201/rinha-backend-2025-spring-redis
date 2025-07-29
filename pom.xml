@@ -77,7 +77,7 @@
                                 --no-fallback
                                 --enable-preview
                                 -H:+UnlockExperimentalVMOptions
-                                -H:Optimize=2
+                                -O2
                                 -march=skylake
                             </BP_NATIVE_IMAGE_BUILD_ARGUMENTS>
                         </env>
