@@ -1,6 +1,6 @@
 x-backend-templates:
   app: &app
-    image: csouzadocker/rinha-2025-redis-native:0.0.1
+    image: csouzadocker/rinha-2025-redis-reactive:0.0.1
     depends_on:
       - redis
     networks:

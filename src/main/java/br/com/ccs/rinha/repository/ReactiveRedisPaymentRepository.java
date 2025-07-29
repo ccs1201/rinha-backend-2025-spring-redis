@@ -2,61 +2,39 @@ package br.com.ccs.rinha.repository;
 
 import br.com.ccs.rinha.api.model.input.PaymentRequest;
 import br.com.ccs.rinha.api.model.output.PaymentSummary;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.data.redis.core.RedisCallback;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.stereotype.Repository;
+import org.springframework.data.domain.Range;
+import org.springframework.data.redis.core.ReactiveRedisTemplate;
+import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
-import java.util.Set;
 
 import static java.util.Objects.isNull;
 
-@Repository
-public class RedisPaymentRepository {
+@Component
+public class ReactiveRedisPaymentRepository {
 
-    private static final Logger log = LoggerFactory.getLogger(RedisPaymentRepository.class);
-
-    private final RedisTemplate<String, String> redisTemplate;
     private static final String PAYMENTS = "payments";
 
-    public RedisPaymentRepository(RedisTemplate<String, String> redisTemplate) {
+    private final ReactiveRedisTemplate<String, String> redisTemplate;
+
+
+    public ReactiveRedisPaymentRepository(ReactiveRedisTemplate<String, String> redisTemplate) {
         this.redisTemplate = redisTemplate;
     }
 
     public void store(PaymentRequest paymentRequest) {
-        var data = DataBuilder.build(paymentRequest);
+        String data = DataBuilder.build(paymentRequest);
 
-        redisTemplate
-                .opsForZSet()
-                .add(PAYMENTS, data, paymentRequest.requestedAt.toEpochMilli());
+        double score = paymentRequest.requestedAt.toEpochMilli();
 
+        redisTemplate.opsForZSet()
+                .add(PAYMENTS, data, score)
+                .thenReturn(paymentRequest)
+                .subscribe();
     }
-
-    public void storeBatch(List<PaymentRequest> requests) {
-        var start = System.nanoTime();
-
-        redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
-            for (PaymentRequest request : requests) {
-                String data = DataBuilder.build(request);
-
-                byte[] key = redisTemplate.getStringSerializer().serialize(PAYMENTS);
-                byte[] value = redisTemplate.getStringSerializer().serialize(data);
-
-                connection.zAdd(key, request.requestedAt.toEpochMilli(), value);
-            }
-
-            log.info("BATCH {} executed in {}ms", requests.size(),
-                    String.format("%.3f", (System.nanoTime() - start) / 1_000_000F));
-
-            return null;
-        });
-    }
-
 
     public PaymentSummary getSummary(Instant from, Instant to) {
 
@@ -67,14 +45,21 @@ public class RedisPaymentRepository {
         if (isNull(to)) {
             to = Instant.now();
         }
-        var payments = redisTemplate.opsForZSet().rangeByScore(PAYMENTS, from.toEpochMilli(), to.toEpochMilli());
 
-        return calculateSummary(payments);
+        var range = Range.of(Range.Bound.inclusive((double) from.toEpochMilli()),
+                Range.Bound.inclusive((double) to.toEpochMilli()));
+
+        return redisTemplate.opsForZSet()
+                .rangeByScore(PAYMENTS, range)
+                .collectList()
+                .map(this::calculateSummary)
+                .block();
     }
 
-    private PaymentSummary calculateSummary(Set<String> payments) {
+    private PaymentSummary calculateSummary(List<String> payments) {
         if (payments == null || payments.isEmpty()) {
-            return new PaymentSummary(new PaymentSummary.Summary(0, BigDecimal.ZERO), new PaymentSummary.Summary(0, BigDecimal.ZERO));
+            return new PaymentSummary(new PaymentSummary.Summary(0, BigDecimal.ZERO),
+                    new PaymentSummary.Summary(0, BigDecimal.ZERO));
         }
 
         long defaultCount = 0;
@@ -84,7 +69,7 @@ public class RedisPaymentRepository {
 
         for (String payment : payments) {
             String[] parts = payment.split(":");
-            long amount = Long.parseLong(parts[1]); // armazenar centavos
+            long amount = Long.parseLong(parts[1]);
             boolean isDefault = Boolean.parseBoolean(parts[2]);
 
             if (isDefault) {
@@ -102,10 +87,10 @@ public class RedisPaymentRepository {
     }
 
     public void purge() {
-        redisTemplate.delete(PAYMENTS);
+        redisTemplate.delete(PAYMENTS).block();
     }
 
-    private final class DataBuilder {
+    private static final class DataBuilder {
 
         private static final ThreadLocal<StringBuilder> builderHolder = ThreadLocal.withInitial(() -> new StringBuilder(64));
 
@@ -125,5 +110,4 @@ public class RedisPaymentRepository {
             return sb.toString();
         }
     }
-
 }

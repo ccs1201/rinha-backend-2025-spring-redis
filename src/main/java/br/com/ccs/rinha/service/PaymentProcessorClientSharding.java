@@ -1,7 +1,7 @@
 package br.com.ccs.rinha.service;
 
 import br.com.ccs.rinha.api.model.input.PaymentRequest;
-import br.com.ccs.rinha.repository.RedisRepositoryWorker;
+import br.com.ccs.rinha.repository.ReactiveRedisPaymentRepository;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,12 +12,13 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 public class PaymentProcessorClientSharding {
     private static final Logger log = LoggerFactory.getLogger(PaymentProcessorClientSharding.class);
 
-    private final RedisRepositoryWorker redisRepositoryWorker;
+    private final ReactiveRedisPaymentRepository redisRepositoryWorker;
     private final String defaultUrl;
     private final String fallbackUrl;
     private final WebClient webClient;
@@ -25,11 +26,12 @@ public class PaymentProcessorClientSharding {
     private final int timeOut;
     private final int workers;
     private final int queueCapacity;
+    private final AtomicInteger index = new AtomicInteger(0);
 
     private final ArrayBlockingQueue<PaymentRequest>[] queues;
 
     public PaymentProcessorClientSharding(
-            RedisRepositoryWorker redisRepositoryWorker,
+            ReactiveRedisPaymentRepository redisRepositoryWorker,
             WebClient webClient,
             @Value("${payment-processor.default.url}") String defaultUrl,
             @Value("${payment-processor.fallback.url}") String fallbackUrl) {
@@ -55,7 +57,7 @@ public class PaymentProcessorClientSharding {
     }
 
     @PostConstruct
-    public void  init() {
+    public void init() {
         for (int i = 0; i < workers; i++) {
             queues[i] = new ArrayBlockingQueue<>(queueCapacity, false);
             startProcessQueue(i, queues[i]);
@@ -79,11 +81,14 @@ public class PaymentProcessorClientSharding {
     }
 
     public void processPayment(PaymentRequest paymentRequest) {
-        int index = Math.abs(paymentRequest.hashCode()) % queues.length;
-        boolean accepted = queues[index].offer(paymentRequest);
+        boolean accepted = queues[index.getAndIncrement()].offer(paymentRequest);
 
         if (!accepted) {
             log.error("Payment rejected by queue {}", index);
+        }
+
+        if (index.get() >= queues.length) {
+            index.set(0);
         }
     }
 
@@ -129,6 +134,6 @@ public class PaymentProcessorClientSharding {
     }
 
     private void save(PaymentRequest request) {
-        redisRepositoryWorker.offer(request);
+        redisRepositoryWorker.store(request);
     }
 }

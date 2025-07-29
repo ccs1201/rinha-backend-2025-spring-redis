@@ -28,42 +28,24 @@ public final class PaymentRequest {
 
     public static PaymentRequest parse(String json) {
         PaymentRequest req = new PaymentRequest();
-        char[] chars = json.toCharArray();
+        var chars = json.toCharArray();
 
-        // correlationId
         int idx = json.indexOf("\"correlationId\":\"") + 17;
         int end = json.indexOf('"', idx);
         req.correlationId = json.substring(idx, end);
 
-        // amount
         idx = json.indexOf("\"amount\":", end) + 9;
-        while (chars[idx] == ' ' || chars[idx] == '\t') idx++; // pular espaços
+        while (chars[idx] == ' ' || chars[idx] == '\t') idx++;
 
         int startAmount = idx;
         while ((chars[idx] >= '0' && chars[idx] <= '9') || chars[idx] == '.' || chars[idx] == '-') idx++;
 
         req.amount = new BigDecimal(json.substring(startAmount, idx));
-
-        // instante de chegada da requisição
         req.requestedAt = Instant.now();
         req.setDefaultFalse();
 
         return req;
     }
-
-//    public static PaymentRequest parse(String json) {
-//        PaymentRequest req = new PaymentRequest();
-//        int startId = json.indexOf(":\"") + 2;
-//        int endId = json.indexOf('"', startId);
-//        req.correlationId = json.substring(startId, endId);
-//        int startAmount = json.indexOf(":", endId) + 1;
-//        int endAmount = json.indexOf('}', startAmount);
-//        req.amount = new BigDecimal(json.substring(startAmount, endAmount).trim());
-//        req.requestedAt = Instant.now();
-//        req.setDefaultFalse();
-//
-//        return req;
-//    }
 
     private void toJson() {
         var sb = new StringBuilder(128);
